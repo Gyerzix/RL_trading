@@ -2,29 +2,30 @@ import pickle
 import os
 
 class TrajectoryLogger:
-    def __init__(self):
-        self.trajectories = []
-        self.current_states = []
-        self.current_actions = []
-        self.current_rewards = []
+    def __init__(self, window_size=5):
+        self.bags = []
+        self.buffer_states = []
+        self.buffer_actions = []
+        self.buffer_rewards = []
+        self.window_size = window_size
 
     def log_step(self, state, action, reward):
-        self.current_states.append(state)
-        self.current_actions.append(action)
-        self.current_rewards.append(reward)
+        self.buffer_states.append(state)
+        self.buffer_actions.append(action)
+        self.buffer_rewards.append(reward)
 
-    def end_episode(self):
-        trajectory_return = sum(self.current_rewards)
-        self.trajectories.append({
-            "states": self.current_states.copy(),
-            "actions": self.current_actions.copy(),
-            "return": trajectory_return
-        })
-        self.current_states.clear()
-        self.current_actions.clear()
-        self.current_rewards.clear()
+        if len(self.buffer_states) == self.window_size:
+            bag = {
+                "states": self.buffer_states.copy(),
+                "actions": self.buffer_actions.copy(),
+                "return": sum(self.buffer_rewards)
+            }
+            self.bags.append(bag)
+            self.buffer_states.pop(0)
+            self.buffer_actions.pop(0)
+            self.buffer_rewards.pop(0)
 
     def save(self, path="trajectories.pkl"):
         with open(path, "wb") as f:
-            pickle.dump(self.trajectories, f)
-        print(f"Saved {len(self.trajectories)} trajectories to {path}")
+            pickle.dump(self.bags, f)
+        print(f"Saved {len(self.bags)} bags to {path}")

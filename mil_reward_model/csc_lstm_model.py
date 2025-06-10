@@ -6,9 +6,13 @@ class FeatureExtractor(nn.Module):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
             nn.ReLU(),
+            nn.Dropout(0.3),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU()
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(0.3)
         )
 
     def forward(self, x):
@@ -27,11 +31,18 @@ class CSCInstanceSpaceLSTM(nn.Module):
         # LSTM for temporal hidden state
         self.lstm = nn.LSTM(input_size=feature_dim, hidden_size=lstm_hidden_dim, batch_first=True)
 
+        self.lstm_norm = nn.LayerNorm(lstm_hidden_dim)
+
         # Head network for reward prediction
         self.head = nn.Sequential(
-            nn.Linear(lstm_hidden_dim + feature_dim, 64),
+            nn.Linear(lstm_hidden_dim + feature_dim, 128),  # Увеличен размер
+            nn.LayerNorm(128),
             nn.ReLU(),
-            nn.Linear(64, 1)  # Scalar reward prediction
+            nn.Dropout(0.3),
+            nn.Linear(128, 64),
+            nn.LayerNorm(64),
+            nn.ReLU(),
+            nn.Linear(64, 1)
         )
 
     def forward(self, state_action_seq):

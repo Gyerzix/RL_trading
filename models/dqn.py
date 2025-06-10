@@ -59,8 +59,7 @@ class DQNAgent:
                 self._learn()
             self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
             rewards.append(total_reward)
-            print(i)
-            print(total_reward)
+            print(f"Episode: {i}")
         return rewards
 
     def _learn(self):

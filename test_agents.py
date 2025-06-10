@@ -15,7 +15,10 @@ df = df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': '
 df = df[['Open', 'High', 'Low', 'Close', 'Volume']].dropna()
 
 # Инициализация среды
-mil_model = MILRewardModel("mil_reward_model/mil_model.pt", state_dim=7, action_dim=3) if USE_MIL_REWARD else None
+REWARD_WINDOW = 20
+mil_model = MILRewardModel("mil_reward_model/mil_model.pt",
+                           state_dim=7, action_dim=3,
+                           reward_window=REWARD_WINDOW) if USE_MIL_REWARD else None
 env = TradingEnv(df, mil_reward_model=mil_model)
 
 results = {}
@@ -37,7 +40,7 @@ results = {}
 # DQN
 print("Training DQN Agent...")
 dqn_agent = DQNAgent(env)
-dqn_rewards = dqn_agent.train(episodes=100)
+dqn_rewards = dqn_agent.train(episodes=10)
 final_net_worth_dqn = env.history[-1]['net_worth'] if env.history else env.initial_balance
 results['DQN'] = {'final_net_worth': final_net_worth_dqn, 'rewards': dqn_rewards[-1]}
 

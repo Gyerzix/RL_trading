@@ -7,6 +7,7 @@ from csc_lstm_model import CSCInstanceSpaceLSTM
 import os
 import numpy as np
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 # === 1. Dataset ===
 
@@ -58,6 +59,7 @@ def train_mil_model(data_path, save_path="mil_model.pt", epochs=30, batch_size=3
 
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
+    # criterion = nn.SmoothL1Loss()
 
     for epoch in range(epochs):
         model.train()
@@ -79,7 +81,26 @@ def train_mil_model(data_path, save_path="mil_model.pt", epochs=30, batch_size=3
 
     # Save model
     torch.save(model.state_dict(), save_path)
-    print(f"✅ Model saved to: {save_path}")
+    print(f"Model saved to: {save_path}")
+
+    model.eval()
+    sample_preds = []
+    sample_true = []
+
+    for i in range(1000):
+        x, y = dataset[i]
+        x = x.unsqueeze(0).to(device)
+        _, pred = model(x)
+        sample_preds.append(pred.item())
+        sample_true.append(y.item())
+
+    plt.figure(figsize=(8, 5))
+    plt.scatter(sample_true, sample_preds, alpha=0.4)
+    plt.xlabel("True Return")
+    plt.ylabel("Predicted Return")
+    plt.title("MIL model predictions vs ground truth")
+    plt.grid(True)
+    plt.savefig("mil_return_scatter.png", dpi=300)
 
 
 # === 3. CLI ===
@@ -89,9 +110,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_path", type=str, default=r"C:\Users\shakh\Trading_with_RL\trajectories.pkl")
     parser.add_argument("--save_path", type=str, default="mil_model.pt")
-    parser.add_argument("--epochs", type=int, default=30)
-    parser.add_argument("--batch_size", type=int, default=128)
-    parser.add_argument("--lr", type=float, default=1e-2)
+    parser.add_argument("--epochs", type=int, default=25)
+    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--lr", type=float, default=1e-3)
     args = parser.parse_args()
 
     train_mil_model(
