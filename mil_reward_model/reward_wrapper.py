@@ -15,27 +15,31 @@ class MILRewardModel:
         self.model.eval()
 
         self.window = reward_window
-        self.buffer = []  # хранит (state, action)
+        self.buffer = []
+        self.hidden_state = np.zeros(32)  # размер скрытого состояния
 
     def reset(self):
         self.buffer = []
+        self.hidden_state = np.zeros(32)
 
     def get_reward(self, state, action):
         self.buffer.append((state, action))
         if len(self.buffer) < self.window:
-            return 0.0  # Нет награды до тех пор, пока не заполнилось окно
+            return 0.0
 
-        # Подготовим batch из одного bag
         state_actions = []
         for s, a in self.buffer:
             a_onehot = np.zeros(3)
             a_onehot[a] = 1
             state_actions.append(np.concatenate([s, a_onehot]))
 
-        x = torch.tensor(np.array([state_actions]), dtype=torch.float32).to(self.device)  # (1, window, D)
+        x = torch.tensor(np.array([state_actions]), dtype=torch.float32).to(self.device)
         with torch.no_grad():
-            _, return_pred = self.model(x)
-        reward = return_pred.item()
-        self.buffer.pop(0)  # сдвигаем окно
-        return reward
+            _, return_pred, lstm_out = self.model(x)
+        self.hidden_state = lstm_out[:, -1, :].squeeze(0).cpu().numpy()
+        self.buffer.pop(0)
+        return return_pred.item()
+
+    def get_hidden_state(self):
+        return self.hidden_state
 

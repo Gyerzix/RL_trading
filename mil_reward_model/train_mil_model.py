@@ -8,6 +8,7 @@ import os
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 # === 1. Dataset ===
 
@@ -79,28 +80,56 @@ def train_mil_model(data_path, save_path="mil_model.pt", epochs=30, batch_size=3
 
         print(f"[Epoch {epoch+1}] Loss: {epoch_loss / len(dataset):.4f}")
 
-    # Save model
-    torch.save(model.state_dict(), save_path)
-    print(f"Model saved to: {save_path}")
+        # === Save model ===
+        torch.save(model.state_dict(), save_path)
+        print(f"Model saved to: {save_path}")
 
-    model.eval()
-    sample_preds = []
-    sample_true = []
+        # === Plot training loss ===
+        plt.figure(figsize=(8, 5))
+        plt.plot(epoch_losses, label="Training Loss")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss (MSE)")
+        plt.title("MIL Model Training Loss")
+        plt.grid(True)
+        plt.legend()
+        plt.savefig("mil_training_loss.png", dpi=300)
+        plt.close()
 
-    for i in range(1000):
-        x, y = dataset[i]
-        x = x.unsqueeze(0).to(device)
-        _, pred = model(x)
-        sample_preds.append(pred.item())
-        sample_true.append(y.item())
+        # === Evaluation ===
+        model.eval()
+        true_returns = []
+        predicted_returns = []
 
-    plt.figure(figsize=(8, 5))
-    plt.scatter(sample_true, sample_preds, alpha=0.4)
-    plt.xlabel("True Return")
-    plt.ylabel("Predicted Return")
-    plt.title("MIL model predictions vs ground truth")
-    plt.grid(True)
-    plt.savefig("mil_return_scatter.png", dpi=300)
+        with torch.no_grad():
+            for i in range(len(dataset)):
+                x, y = dataset[i]
+                x = x.unsqueeze(0).to(device)
+                _, pred, _ = model(x)
+                predicted_returns.append(pred.item())
+                true_returns.append(y.item())
+
+        true_returns = np.array(true_returns)
+        predicted_returns = np.array(predicted_returns)
+
+        # === Metrics ===
+        mse = mean_squared_error(true_returns, predicted_returns)
+        mae = mean_absolute_error(true_returns, predicted_returns)
+        r2 = r2_score(true_returns, predicted_returns)
+
+        print("\nEvaluation Metrics:")
+        print(f"  MSE:  {mse:.4f}")
+        print(f"  MAE:  {mae:.4f}")
+        print(f"  R^2:  {r2:.4f}")
+
+        # === Scatter plot ===
+        plt.figure(figsize=(8, 5))
+        plt.scatter(true_returns, predicted_returns, alpha=0.5)
+        plt.xlabel("True Return")
+        plt.ylabel("Predicted Return")
+        plt.title("Predicted vs True Returns")
+        plt.grid(True)
+        plt.savefig("mil_return_scatter.png", dpi=300)
+        plt.close()
 
 
 # === 3. CLI ===

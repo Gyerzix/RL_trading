@@ -5,20 +5,27 @@ import matplotlib.pyplot as plt
 from ta.momentum import RSIIndicator
 from ta.trend import SMAIndicator
 
-from mil_reward_model.reward_wrapper import MILRewardModel
-
 class TradingEnv(gym.Env):
-    def __init__(self, df, initial_balance=10000, commission=0.0005, window_size=20, mil_reward_model=None):
+    def __init__(self, df, initial_balance=10000, commission=0, mil_reward_model=None):
         super(TradingEnv, self).__init__()
         self.df = df
         self.initial_balance = initial_balance
         self.commission = commission
-        self.window_size = window_size
         self.mil_model = mil_reward_model
 
         self.action_space = gym.spaces.Discrete(3)
+
+        # Размерность базовых фич (Open, High, Low, Close, Volume, RSI, SMA)
+        base_features = 7
+        if self.mil_model:
+            # Для MIL: текущее состояние + скрытое состояние (32)
+            obs_shape = (base_features + 32,)
+        else:
+            # Для марковской награды: только текущее состояние
+            obs_shape = (base_features,)
+
         self.observation_space = gym.spaces.Box(
-            low=-np.inf, high=np.inf, shape=(window_size, 7), dtype=np.float32
+            low=-np.inf, high=np.inf, shape=obs_shape, dtype=np.float32
         )
 
         self.df['RSI'] = RSIIndicator(self.df['Close'], window=14).rsi()
@@ -30,7 +37,7 @@ class TradingEnv(gym.Env):
         self.position = 0
         self.net_worth = initial_balance
         self.history = []
-        self.episode = 0
+        self.episode = -1
 
         self.fig = None
         self.ax = None
@@ -38,7 +45,7 @@ class TradingEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        self.current_step = self.window_size
+        self.current_step = 0
         self.balance = self.initial_balance
         self.position = 0
         self.net_worth = self.initial_balance
@@ -51,33 +58,39 @@ class TradingEnv(gym.Env):
         return self._get_observation(), {}
 
     def _get_observation(self):
-        start = self.current_step - self.window_size
-        end = self.current_step
-        window = self.df.iloc[start:end][['Open', 'High', 'Low', 'Close', 'Volume', 'RSI', 'SMA']].values
-        return window.astype(np.float32)
+        # Текущее состояние (7 фич)
+        base_state = self.df.iloc[self.current_step][['Open', 'High', 'Low', 'Close', 'Volume', 'RSI', 'SMA']].values
+        if self.mil_model:
+            # Для MIL: добавляем скрытое состояние (32)
+            h = self.mil_model.get_hidden_state()
+            return np.concatenate([base_state, h]).astype(np.float32)
+        # Для марковской награды: только текущее состояние
+        return base_state.astype(np.float32)
 
     def step(self, action):
         current_price = self.df.iloc[self.current_step]['Close']
+        base_state = self.df.iloc[self.current_step][['Open', 'High', 'Low', 'Close', 'Volume', 'RSI', 'SMA']].values
 
+        reward = 0
+
+        if action == 1:  # Buy
+            if self.balance > 0:
+                btc_to_buy = (self.balance * 0.1 * (1 - self.commission)) / current_price
+                self.position += btc_to_buy
+                self.balance -= btc_to_buy * current_price
+                reward -= self.commission * 100
+        elif action == 2:  # Sell
+            if self.position > 0:
+                btc_to_sell = self.position * 0.1
+                self.balance += btc_to_sell * current_price * (1 - self.commission)
+                self.position -= btc_to_sell
+                reward -= self.commission * 100
+
+        prev_net_worth = self.net_worth
+        self.net_worth = self.balance + self.position * current_price
         if self.mil_model:
-            reward = self.mil_model.get_reward(self._get_observation()[-1], action)
+            reward = self.mil_model.get_reward(base_state, action)
         else:
-            reward = 0
-            if action == 1:  # Buy
-                if self.balance > 0:
-                    btc_to_buy = (self.balance * 0.1 * (1 - self.commission)) / current_price
-                    self.position += btc_to_buy
-                    self.balance -= btc_to_buy * current_price
-                    reward -= self.commission * 100
-            elif action == 2:  # Sell
-                if self.position > 0:
-                    btc_to_sell = self.position * 0.1
-                    self.balance += btc_to_sell * current_price * (1 - self.commission)
-                    self.position -= btc_to_sell
-                    reward -= self.commission * 100
-
-            prev_net_worth = self.net_worth
-            self.net_worth = self.balance + self.position * current_price
             reward += (self.net_worth - prev_net_worth) / self.initial_balance * 100
             reward = np.clip(reward, -100, 100)
 
@@ -93,7 +106,8 @@ class TradingEnv(gym.Env):
         done = self.current_step >= len(self.df) - 1
         truncated = False
 
-        return self._get_observation(), reward, done, truncated, {}
+        obs = self._get_observation()
+        return obs, reward, done, truncated, {}
 
     def render(self):
         if self.fig is None:

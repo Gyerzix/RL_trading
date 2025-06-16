@@ -68,11 +68,11 @@ class DQNAgent:
         batch = random.sample(self.buffer, self.batch_size)
         states, actions, rewards, next_states, dones = zip(*batch)
 
-        states = torch.tensor(states, dtype=torch.float32).to(self.device)
-        actions = torch.tensor(actions, dtype=torch.int64).to(self.device)
-        rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
-        next_states = torch.tensor(next_states, dtype=torch.float32).to(self.device)
-        dones = torch.tensor(dones, dtype=torch.float32).to(self.device)
+        states = torch.from_numpy(np.array([t[0] for t in batch])).float().to(self.device)
+        actions = torch.tensor([t[1] for t in batch], dtype=torch.long).to(self.device)
+        rewards = torch.tensor([t[2] for t in batch], dtype=torch.float32).to(self.device)
+        next_states = torch.from_numpy(np.array([t[3] for t in batch])).float().to(self.device)
+        dones = torch.tensor([t[4] for t in batch], dtype=torch.float32).to(self.device)
 
         q_vals = self.model(states).gather(1, actions.unsqueeze(1)).squeeze(1)
         with torch.no_grad():
@@ -83,4 +83,3 @@ class DQNAgent:
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-

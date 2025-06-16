@@ -65,4 +65,4 @@ class CSCInstanceSpaceLSTM(nn.Module):
         rewards = self.head(concat).squeeze(-1)  # (B, T)
 
         # Return both timestep rewards and their sum (total return)
-        return rewards, rewards.sum(dim=1)  # (B, T), (B,)
+        return rewards, rewards.sum(dim=1), lstm_out  # (B, T), (B,)
